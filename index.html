@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ระบบบัญชี Onlymyh</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -73,6 +74,22 @@
                     <div class="bg-blue-50 p-3 rounded-xl border border-blue-100">
                         <p class="text-xs text-blue-600 font-medium mb-1">กำไรสุทธิ</p>
                         <h3 class="text-lg md:text-2xl font-bold text-blue-700" id="netProfit">฿0</h3>
+                    </div>
+                </div>
+
+                <!-- Chart Section -->
+                <div class="mt-6 border-t border-gray-100 pt-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-700 mb-3"><i class="fas fa-chart-pie mr-1 text-purple-500"></i> สัดส่วนภาพรวม</h3>
+                        <div class="relative h-48 w-full">
+                            <canvas id="overviewChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-700 mb-3"><i class="fas fa-chart-bar mr-1 text-blue-500"></i> แนวโน้มรายวัน</h3>
+                        <div class="relative h-48 w-full">
+                            <canvas id="statChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -153,13 +170,31 @@
 
                 <!-- Recent Transactions List -->
                 <div class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-                    <h2 class="text-lg font-bold text-gray-700 mb-4">รายการล่าสุด</h2>
+                    <h2 class="text-lg font-bold text-gray-700 mb-4">รายการล่าสุด <span class="text-xs font-normal text-gray-400">(กดดูรายละเอียดได้)</span></h2>
                     <div class="space-y-3 max-h-[500px] overflow-y-auto hide-scrollbar" id="transactionList">
                         <!-- Transactions will be injected here via JS -->
                         <div class="text-center text-gray-400 py-10">กำลังโหลดข้อมูล...</div>
                     </div>
                 </div>
                 
+            </div>
+        </div>
+
+        <!-- Transaction Detail Modal -->
+        <div id="detailModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm flex justify-center items-center z-[110] px-4 hidden transition-opacity">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative max-h-[90vh] flex flex-col">
+                <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-bold text-gray-800">รายละเอียดรายการ</h3>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700 transition">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto" id="detailContent">
+                    <!-- ข้อมูลจะถูกใส่ผ่าน JS -->
+                </div>
+                <div class="p-4 border-t bg-gray-50 text-center">
+                    <button onclick="closeModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition w-full">ปิดหน้าต่าง</button>
+                </div>
             </div>
         </div>
 
@@ -195,6 +230,9 @@
         // --- 1. State Management ---
         // ข้อมูลจะถูกเก็บไว้ใน Array นี้เมื่อมีการบันทึก (ของจริง Google Sheet จะเก็บข้อมูลไว้)
         let transactions = [];
+
+        let myChart = null; // ตัวแปรเก็บกราฟแท่ง
+        let myPieChart = null; // ตัวแปรเก็บกราฟโดนัทภาพรวม
 
         // ตั้งค่าวันที่ปัจจุบันให้ Form
         document.getElementById('recordDate').valueAsDate = new Date();
@@ -361,6 +399,101 @@
             }
 
             renderList(filteredData);
+            renderChart(filteredData);
+        }
+
+        function renderChart(data) {
+            const ctxBar = document.getElementById('statChart').getContext('2d');
+            const ctxPie = document.getElementById('overviewChart').getContext('2d');
+            
+            // 1. จัดกลุ่มข้อมูลยอดเงินตามวันที่ (สำหรับกราฟแท่ง) และคำนวณยอดรวม (สำหรับกราฟโดนัท)
+            const grouped = {};
+            let sumIncome = 0;
+            let sumExpense = 0;
+
+            data.forEach(item => {
+                // สำหรับกราฟแท่ง
+                const sortKey = item.date;
+                const d = new Date(item.date);
+                const dateLabel = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+                
+                if(!grouped[sortKey]) grouped[sortKey] = { label: dateLabel, income: 0, expense: 0 };
+                
+                if(item.type === 'income') {
+                    grouped[sortKey].income += item.amount;
+                    sumIncome += item.amount;
+                } else {
+                    grouped[sortKey].expense += item.amount;
+                    sumExpense += item.amount;
+                }
+            });
+
+            // 2. ลบกราฟเก่าออกก่อนวาดใหม่
+            if (myChart) myChart.destroy();
+            if (myPieChart) myPieChart.destroy();
+
+            // ถ้าไม่มีข้อมูล ให้ข้ามการวาดกราฟ
+            if (Object.keys(grouped).length === 0) return;
+
+            // 3. วาดกราฟโดนัท (ภาพรวมสัดส่วน)
+            myPieChart = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: ['รายรับ', 'รายจ่าย'],
+                    datasets: [{
+                        data: [sumIncome, sumExpense],
+                        backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(239, 68, 68, 0.8)'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { family: 'Prompt' }, boxWidth: 12 } }
+                    }
+                }
+            });
+
+            // 4. วาดกราฟแท่ง (แนวโน้ม)
+            const sortedKeys = Object.keys(grouped).sort();
+            const labels = sortedKeys.map(k => grouped[k].label);
+            const incomes = sortedKeys.map(k => grouped[k].income);
+            const expenses = sortedKeys.map(k => grouped[k].expense);
+
+            myChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'รายรับ',
+                            data: incomes,
+                            backgroundColor: 'rgba(34, 197, 94, 0.8)', // สีเขียว
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'รายจ่าย',
+                            data: expenses,
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)', // สีแดง
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { font: { family: 'Prompt' } } },
+                        x: { ticks: { font: { family: 'Prompt' } } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { family: 'Prompt' }, boxWidth: 12 } }
+                    }
+                }
+            });
         }
 
         function filterTransactions(period) {
@@ -411,7 +544,7 @@
                 if (isIncome && item.customer) detailText += ` • ลค: ${item.customer}`;
                 if (!isIncome && item.supplier) {
                     const isLink = item.supplier.startsWith('http');
-                    detailText += ` • ร้าน: ${isLink ? `<a href="${item.supplier}" target="_blank" class="text-blue-500 underline">ลิงก์ร้าน</a>` : item.supplier}`;
+                    detailText += ` • ร้าน: ${isLink ? `มีลิงก์แนบ` : item.supplier}`;
                 }
                 
                 let qtyText = '';
@@ -420,8 +553,9 @@
                     qtyText = `<p class="text-[10px] text-gray-500 text-right mt-0.5">${item.quantity} ชิ้น (ชิ้นละ ฿${perPiece})</p>`;
                 }
 
+                // เพิ่ม onclick="showDetail(${item.id})" และ cursor-pointer เพื่อให้กดได้
                 const card = `
-                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition">
+                    <div onclick="showDetail(${item.id})" class="cursor-pointer flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 border border-transparent hover:border-gray-200 transition">
                         <div class="flex items-center gap-3 w-3/5">
                             <div class="w-10 h-10 rounded-full flex items-center justify-center min-w-[40px] ${icon.split(' ')[2]}">
                                 <i class="fas ${icon.split(' ')[0]} ${icon.split(' ')[1]}"></i>
@@ -434,7 +568,7 @@
                         <div class="text-right flex flex-col items-end justify-center w-2/5">
                             <div class="flex items-center gap-1">
                                 <p class="font-bold ${color}">${sign}฿${item.amount.toLocaleString('th-TH')}</p>
-                                ${item.image ? `<i class="fas fa-image text-gray-400 text-xs ml-1"></i>` : ''}
+                                ${item.image ? `<i class="fas fa-image text-blue-400 text-xs ml-1"></i>` : ''}
                             </div>
                             ${qtyText}
                         </div>
@@ -444,7 +578,90 @@
             });
         }
 
-        // --- 6. Utilities ---
+        // --- 7. Modal Logic ---
+        function showDetail(id) {
+            const item = transactions.find(t => t.id === id);
+            if(!item) return;
+
+            const isIncome = item.type === 'income';
+            const color = isIncome ? 'text-green-600' : 'text-red-600';
+            const sign = isIncome ? '+' : '-';
+            const d = new Date(item.date);
+            const dateStr = d.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+            let html = `
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span class="text-gray-500">ประเภท:</span>
+                        <span class="font-bold px-3 py-1 rounded-full text-xs ${isIncome ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                            ${isIncome ? 'รับเงิน (รายได้)' : 'จ่ายเงิน (ต้นทุน)'}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span class="text-gray-500">วันที่:</span>
+                        <span class="font-medium text-gray-800">${dateStr}</span>
+                    </div>
+                    <div class="flex justify-between items-start pb-2 border-b border-gray-100">
+                        <span class="text-gray-500 w-1/3">ชื่อรายการ:</span>
+                        <span class="font-medium text-gray-800 w-2/3 text-right">${item.name}</span>
+                    </div>
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span class="text-gray-500">จำนวน:</span>
+                        <span class="font-medium text-gray-800">${item.quantity} ชิ้น</span>
+                    </div>
+            `;
+
+            if(isIncome && item.customer) {
+                html += `
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span class="text-gray-500">ลูกค้า:</span>
+                        <span class="font-medium text-gray-800">${item.customer}</span>
+                    </div>`;
+            }
+
+            if(!isIncome && item.supplier) {
+                const isLink = item.supplier.startsWith('http');
+                const supVal = isLink ? `<a href="${item.supplier}" target="_blank" class="text-blue-600 hover:text-blue-800 underline font-medium break-all">คลิกเพื่อเปิดลิงก์ร้านค้า <i class="fas fa-external-link-alt text-xs ml-1"></i></a>` : item.supplier;
+                html += `
+                    <div class="flex justify-between items-start pb-2 border-b border-gray-100 flex-col md:flex-row gap-1">
+                        <span class="text-gray-500">ร้านค้า/ที่มา:</span>
+                        <span class="font-medium text-gray-800 text-left md:text-right w-full md:w-auto">${supVal}</span>
+                    </div>`;
+            }
+
+            html += `
+                    <div class="flex justify-between items-center pt-2 mt-2">
+                        <span class="text-gray-800 font-bold text-base">ยอดเงินรวม:</span>
+                        <span class="font-bold text-xl ${color}">${sign}฿${item.amount.toLocaleString('th-TH')}</span>
+                    </div>
+            `;
+
+            if(item.quantity > 1) {
+                const pp = (item.amount/item.quantity).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                html += `<div class="text-right text-xs text-gray-500 mt-1">(เฉลี่ยชิ้นละ ฿${pp})</div>`;
+            }
+
+            if(item.image) {
+                html += `
+                    <div class="mt-5 pt-4 border-t border-gray-200">
+                        <p class="text-gray-500 mb-3 text-xs font-semibold uppercase tracking-wider">หลักฐาน/สลิป</p>
+                        <div class="bg-gray-100 p-2 rounded-xl">
+                            <img src="${item.image}" class="w-full rounded-lg shadow-sm" alt="Slip/Receipt">
+                        </div>
+                    </div>`;
+            }
+
+            html += `</div>`; // ปิด div.space-y-3
+
+            document.getElementById('detailContent').innerHTML = html;
+            document.getElementById('detailModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+        }
+
+        // --- 8. Utilities ---
         function showToast(msg) {
             const toast = document.getElementById('toast');
             document.getElementById('toastMsg').innerText = msg;

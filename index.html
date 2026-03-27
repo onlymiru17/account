@@ -1,1 +1,458 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบัญชี Onlymyh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f3f4f6; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
+        .tab-inactive { color: #6b7280; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-gray-800">
 
+    <!-- Login Screen -->
+    <div id="loginScreen" class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm flex flex-col justify-center items-center z-[100] px-4">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 text-3xl shadow-inner">
+                <i class="fas fa-lock"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-1">Onlymyh</h2>
+            <p class="text-gray-500 text-sm mb-6">กรุณากรอกรหัสแอดมินเพื่อเข้าใช้งาน</p>
+            
+            <form onsubmit="handleLogin(event)">
+                <input type="password" id="pinInput" class="w-full text-center text-2xl tracking-[0.3em] border border-gray-300 rounded-xl p-3 mb-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="********" required>
+                <p id="loginError" class="text-red-500 text-sm mb-4 hidden">รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่</p>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-lg px-5 py-3 transition duration-200 shadow-md">
+                    <i class="fas fa-sign-in-alt mr-2"></i> เข้าสู่ระบบ
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App Container (Hidden initially) -->
+    <div id="mainApp" class="hidden">
+
+        <!-- Navbar -->
+        <nav class="bg-blue-600 text-white shadow-md p-4 sticky top-0 z-50">
+            <div class="max-w-4xl mx-auto flex justify-between items-center">
+                <h1 class="text-xl font-bold"><i class="fas fa-wallet mr-2"></i> Onlymyh</h1>
+                <div class="text-sm bg-blue-700 px-3 py-1 rounded-full"><i class="fas fa-user-circle mr-1"></i> แอดมิน</div>
+            </div>
+        </nav>
+
+        <div class="max-w-4xl mx-auto p-4 space-y-6">
+            
+            <!-- Summary Dashboard -->
+            <div class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-gray-700">สรุปผลประกอบการ</h2>
+                    <select id="filterPeriod" onchange="renderDashboard()" class="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2">
+                        <option value="all">ทั้งหมด</option>
+                        <option value="month" selected>เดือนนี้</option>
+                        <option value="week">สัปดาห์นี้</option>
+                        <option value="year">ปีนี้</option>
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-green-50 p-3 rounded-xl border border-green-100">
+                        <p class="text-xs text-green-600 font-medium mb-1">รายรับรวม</p>
+                        <h3 class="text-lg md:text-2xl font-bold text-green-700" id="totalIncome">฿0</h3>
+                    </div>
+                    <div class="bg-red-50 p-3 rounded-xl border border-red-100">
+                        <p class="text-xs text-red-600 font-medium mb-1">ต้นทุน/รายจ่าย</p>
+                        <h3 class="text-lg md:text-2xl font-bold text-red-700" id="totalExpense">฿0</h3>
+                    </div>
+                    <div class="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                        <p class="text-xs text-blue-600 font-medium mb-1">กำไรสุทธิ</p>
+                        <h3 class="text-lg md:text-2xl font-bold text-blue-700" id="netProfit">฿0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- Input Form Section -->
+                <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+                    <div class="flex border-b border-gray-200">
+                        <button onclick="switchTab('income')" id="tabIncome" class="flex-1 py-3 text-center tab-active bg-gray-50">
+                            <i class="fas fa-arrow-down text-green-500 mr-1"></i> รับเงิน (รายได้)
+                        </button>
+                        <button onclick="switchTab('expense')" id="tabExpense" class="flex-1 py-3 text-center tab-inactive bg-gray-50 border-b border-gray-200 hover:bg-gray-100">
+                            <i class="fas fa-arrow-up text-red-500 mr-1"></i> จ่ายเงิน (ต้นทุน)
+                        </button>
+                    </div>
+                    
+                    <form id="recordForm" class="p-5 space-y-4" onsubmit="handleFormSubmit(event)">
+                        <input type="hidden" id="recordType" value="income">
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">วันที่</label>
+                            <input type="date" id="recordDate" required class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1" id="nameLabel">รายการสินค้าที่ขาย</label>
+                            <input type="text" id="recordName" required placeholder="เช่น ค่าเสื้อยืดรุ่น A" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1" id="amountLabel">จำนวนเงินรวมที่ได้รับ (บาท)</label>
+                            <input type="number" id="recordAmount" required min="0" step="0.01" placeholder="0.00" oninput="calculatePerPiece()" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+
+                        <div id="quantityField">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">จำนวน (ชิ้น)</label>
+                            <input type="number" id="recordQuantity" min="1" value="1" oninput="calculatePerPiece()" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
+                            <p id="perPieceText" class="text-xs text-blue-600 mt-1 font-medium"></p>
+                        </div>
+
+                        <div id="customerField">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อลูกค้า (ถ้ามี)</label>
+                            <input type="text" id="recordCustomer" placeholder="เช่น คุณสมชาย" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+
+                        <div id="supplierField" style="display: none;">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อร้านค้า / ลิงก์ร้าน (ที่ซื้อมา)</label>
+                            <input type="text" id="recordSupplier" placeholder="เช่น ร้าน A / วางลิงก์ Shopee" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+
+                        <!-- Camera / Upload Feature -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">แนบสลิป/ใบเสร็จ</label>
+                            <div class="flex items-center justify-center w-full">
+                                <label for="recordImage" class="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                                    <div class="flex flex-col items-center justify-center pt-5 pb-6" id="uploadPlaceholder">
+                                        <i class="fas fa-camera text-2xl text-gray-400 mb-2"></i>
+                                        <p class="text-sm text-gray-500">แตะเพื่อถ่ายรูป หรือ อัปโหลด</p>
+                                    </div>
+                                    <div id="imagePreviewContainer" class="hidden w-full h-full relative p-1">
+                                        <img id="imagePreview" class="h-full w-full object-contain rounded-md" src="" alt="Preview">
+                                        <button type="button" onclick="clearImage(event)" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-md transition">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <input id="recordImage" type="file" accept="image/*" capture="environment" class="hidden" onchange="previewImage(event)" />
+                                </label>
+                            </div>
+                            <input type="hidden" id="imageBase64" value="">
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm px-5 py-3 text-center transition duration-200 shadow-md">
+                            <i class="fas fa-save mr-1"></i> บันทึกข้อมูล
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Recent Transactions List -->
+                <div class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-700 mb-4">รายการล่าสุด</h2>
+                    <div class="space-y-3 max-h-[500px] overflow-y-auto hide-scrollbar" id="transactionList">
+                        <!-- Transactions will be injected here via JS -->
+                        <div class="text-center text-gray-400 py-10">กำลังโหลดข้อมูล...</div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="fixed bottom-5 right-5 transform transition-transform duration-300 translate-y-20 opacity-0 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-lg flex items-center z-50">
+            <i class="fas fa-check-circle text-green-400 mr-2"></i>
+            <span id="toastMsg">บันทึกสำเร็จ</span>
+        </div>
+    </div>
+
+    <script>
+        // --- 0. Login Logic ---
+        function handleLogin(event) {
+            event.preventDefault();
+            const pin = document.getElementById('pinInput').value;
+            const errorText = document.getElementById('loginError');
+
+            // รหัสผ่านเข้าใช้งาน 17102540
+            if (pin === '17102540') {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('pinInput').value = ''; 
+                
+                // เริ่มเรนเดอร์ข้อมูลหน้าหลักเมื่อล็อกอินผ่าน
+                renderDashboard();
+            } else {
+                errorText.classList.remove('hidden');
+                document.getElementById('pinInput').value = '';
+                document.getElementById('pinInput').focus();
+            }
+        }
+
+        // --- 1. State Management ---
+        // ข้อมูลจะถูกเก็บไว้ใน Array นี้เมื่อมีการบันทึก (ของจริง Google Sheet จะเก็บข้อมูลไว้)
+        let transactions = [];
+
+        // ตั้งค่าวันที่ปัจจุบันให้ Form
+        document.getElementById('recordDate').valueAsDate = new Date();
+
+        // --- 2. UI Logic (Tabs) ---
+        function switchTab(type) {
+            const btnIncome = document.getElementById('tabIncome');
+            const btnExpense = document.getElementById('tabExpense');
+            const typeInput = document.getElementById('recordType');
+            const customerField = document.getElementById('customerField');
+            const supplierField = document.getElementById('supplierField');
+            const nameLabel = document.getElementById('nameLabel');
+            const amountLabel = document.getElementById('amountLabel');
+            const submitBtn = document.getElementById('submitBtn');
+
+            typeInput.value = type;
+
+            if (type === 'income') {
+                btnIncome.className = "flex-1 py-3 text-center tab-active bg-white";
+                btnExpense.className = "flex-1 py-3 text-center tab-inactive bg-gray-50 border-b border-gray-200 hover:bg-gray-100";
+                customerField.style.display = 'block';
+                supplierField.style.display = 'none';
+                nameLabel.innerText = "รายการสินค้าที่ขาย";
+                amountLabel.innerText = "จำนวนเงินรวมที่ได้รับ (บาท)";
+                submitBtn.className = "w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm px-5 py-3 text-center transition duration-200 shadow-md";
+            } else {
+                btnExpense.className = "flex-1 py-3 text-center tab-active bg-white text-red-600 border-b-2 border-red-500";
+                btnIncome.className = "flex-1 py-3 text-center tab-inactive bg-gray-50 border-b border-gray-200 hover:bg-gray-100";
+                customerField.style.display = 'none';
+                supplierField.style.display = 'block';
+                nameLabel.innerText = "รายการต้นทุน/สินค้าที่ซื้อ";
+                amountLabel.innerText = "จำนวนเงินรวมที่จ่าย (บาท)";
+                submitBtn.className = "w-full bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg text-sm px-5 py-3 text-center transition duration-200 shadow-md";
+            }
+            calculatePerPiece();
+        }
+
+        // คำนวณราคาเฉลี่ยต่อชิ้น
+        function calculatePerPiece() {
+            const amount = parseFloat(document.getElementById('recordAmount').value) || 0;
+            const qty = parseInt(document.getElementById('recordQuantity').value) || 1;
+            const textEl = document.getElementById('perPieceText');
+            
+            if (amount > 0 && qty > 0) {
+                const perPiece = (amount / qty).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                textEl.innerText = `ตกชิ้นละ ฿${perPiece}`;
+            } else {
+                textEl.innerText = '';
+            }
+        }
+
+        // --- 3. Image Upload Logic ---
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('imageBase64').value = e.target.result;
+                document.getElementById('imagePreview').src = e.target.result;
+                document.getElementById('uploadPlaceholder').classList.add('hidden');
+                document.getElementById('imagePreviewContainer').classList.remove('hidden');
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage(event) {
+            if(event) event.preventDefault();
+            document.getElementById('recordImage').value = '';
+            document.getElementById('imageBase64').value = '';
+            document.getElementById('imagePreview').src = '';
+            document.getElementById('uploadPlaceholder').classList.remove('hidden');
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+        }
+
+        // --- 4. Submit Form Logic ---
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            
+            // เปลี่ยนปุ่มเป็นสถานะกำลังโหลด
+            const btn = document.getElementById('submitBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังบันทึก...';
+            btn.disabled = true;
+
+            const newRecord = {
+                id: Date.now(),
+                type: document.getElementById('recordType').value,
+                date: document.getElementById('recordDate').value,
+                name: document.getElementById('recordName').value,
+                amount: parseFloat(document.getElementById('recordAmount').value),
+                quantity: parseInt(document.getElementById('recordQuantity').value) || 1,
+                customer: document.getElementById('recordCustomer').value,
+                supplier: document.getElementById('recordSupplier').value,
+                image: document.getElementById('imageBase64').value 
+            };
+
+            // เรียกใช้งานฟังก์ชัน saveDataToSheet ฝั่ง Code.gs
+            if (typeof google !== 'undefined' && google.script) {
+                google.script.run
+                    .withSuccessHandler(function(response) {
+                        saveSuccess(newRecord, btn, originalText);
+                    })
+                    .withFailureHandler(function(error) {
+                        alert("เกิดข้อผิดพลาด: " + error);
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    })
+                    .saveDataToSheet(newRecord); 
+            } else {
+                // จำลองการทำงานเมื่อทดสอบเปิดไฟล์ HTML ตรงๆ โดยไม่ผ่าน Apps Script
+                setTimeout(() => {
+                    saveSuccess(newRecord, btn, originalText);
+                }, 800);
+            }
+        }
+
+        function saveSuccess(newRecord, btn, originalText) {
+            transactions.unshift(newRecord); 
+            renderDashboard(); 
+            
+            // รีเซ็ตฟอร์ม
+            document.getElementById('recordName').value = '';
+            document.getElementById('recordAmount').value = '';
+            document.getElementById('recordQuantity').value = '1';
+            document.getElementById('recordCustomer').value = '';
+            document.getElementById('recordSupplier').value = '';
+            document.getElementById('perPieceText').innerText = '';
+            clearImage();
+            
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+
+            showToast('บันทึกข้อมูลลง Sheet เรียบร้อยแล้ว');
+        }
+
+        // --- 5. Data Rendering & Filtering ---
+        function renderDashboard() {
+            const period = document.getElementById('filterPeriod').value;
+            const filteredData = filterTransactions(period);
+            
+            let tIncome = 0;
+            let tExpense = 0;
+
+            filteredData.forEach(item => {
+                if (item.type === 'income') tIncome += item.amount;
+                if (item.type === 'expense') tExpense += item.amount;
+            });
+
+            const profit = tIncome - tExpense;
+
+            // อัปเดตตัวเลข
+            document.getElementById('totalIncome').innerText = '฿' + tIncome.toLocaleString('th-TH');
+            document.getElementById('totalExpense').innerText = '฿' + tExpense.toLocaleString('th-TH');
+            
+            const profitEl = document.getElementById('netProfit');
+            profitEl.innerText = '฿' + profit.toLocaleString('th-TH');
+            if(profit < 0) {
+                profitEl.classList.remove('text-blue-700');
+                profitEl.classList.add('text-red-600');
+            } else {
+                profitEl.classList.add('text-blue-700');
+                profitEl.classList.remove('text-red-600');
+            }
+
+            renderList(filteredData);
+        }
+
+        function filterTransactions(period) {
+            if (period === 'all') return transactions;
+
+            const now = new Date();
+            return transactions.filter(item => {
+                const itemDate = new Date(item.date);
+                
+                if (period === 'month') {
+                    return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+                } 
+                else if (period === 'year') {
+                    return itemDate.getFullYear() === now.getFullYear();
+                }
+                else if (period === 'week') {
+                    const oneJan = new Date(now.getFullYear(), 0, 1);
+                    const nowWeek = Math.ceil((((now.getTime() - oneJan.getTime()) / 86400000) + oneJan.getDay() + 1) / 7);
+                    
+                    const itemOneJan = new Date(itemDate.getFullYear(), 0, 1);
+                    const itemWeek = Math.ceil((((itemDate.getTime() - itemOneJan.getTime()) / 86400000) + itemOneJan.getDay() + 1) / 7);
+                    
+                    return nowWeek === itemWeek && itemDate.getFullYear() === now.getFullYear();
+                }
+                return true;
+            });
+        }
+
+        function renderList(data) {
+            const listEl = document.getElementById('transactionList');
+            listEl.innerHTML = '';
+
+            if (data.length === 0) {
+                listEl.innerHTML = `<div class="text-center text-gray-400 py-8"><i class="fas fa-box-open text-3xl mb-2"></i><br>ไม่มีข้อมูลในช่วงเวลานี้</div>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const isIncome = item.type === 'income';
+                const icon = isIncome ? 'fa-arrow-down text-green-500 bg-green-100' : 'fa-arrow-up text-red-500 bg-red-100';
+                const sign = isIncome ? '+' : '-';
+                const color = isIncome ? 'text-green-600' : 'text-red-600';
+                
+                const d = new Date(item.date);
+                const dateStr = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+
+                let detailText = dateStr;
+                if (isIncome && item.customer) detailText += ` • ลค: ${item.customer}`;
+                if (!isIncome && item.supplier) {
+                    const isLink = item.supplier.startsWith('http');
+                    detailText += ` • ร้าน: ${isLink ? `<a href="${item.supplier}" target="_blank" class="text-blue-500 underline">ลิงก์ร้าน</a>` : item.supplier}`;
+                }
+                
+                let qtyText = '';
+                if (item.quantity && item.quantity > 1) {
+                    const perPiece = (item.amount / item.quantity).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    qtyText = `<p class="text-[10px] text-gray-500 text-right mt-0.5">${item.quantity} ชิ้น (ชิ้นละ ฿${perPiece})</p>`;
+                }
+
+                const card = `
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition">
+                        <div class="flex items-center gap-3 w-3/5">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center min-w-[40px] ${icon.split(' ')[2]}">
+                                <i class="fas ${icon.split(' ')[0]} ${icon.split(' ')[1]}"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <p class="text-sm font-semibold text-gray-800 truncate">${item.name}</p>
+                                <p class="text-xs text-gray-500 truncate">${detailText}</p>
+                            </div>
+                        </div>
+                        <div class="text-right flex flex-col items-end justify-center w-2/5">
+                            <div class="flex items-center gap-1">
+                                <p class="font-bold ${color}">${sign}฿${item.amount.toLocaleString('th-TH')}</p>
+                                ${item.image ? `<i class="fas fa-image text-gray-400 text-xs ml-1"></i>` : ''}
+                            </div>
+                            ${qtyText}
+                        </div>
+                    </div>
+                `;
+                listEl.insertAdjacentHTML('beforeend', card);
+            });
+        }
+
+        // --- 6. Utilities ---
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
